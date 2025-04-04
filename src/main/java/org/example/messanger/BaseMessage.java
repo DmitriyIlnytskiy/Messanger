@@ -6,23 +6,25 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
 import java.io.Serializable;
+import java.util.Date;
 
 //1.2.1 Abstract class
 abstract class BaseMessage implements Serializable {
     //1.2.5 Use of private, protected, public
-    protected String date;
-    protected String author;
+    protected Date date;
+    protected User user;
 
     private int messageId;
     private static int messageCount = 0; // Constant field for counting messages
 
-    public BaseMessage(String author, String date) {
-        this.author = author;
+    public BaseMessage(User user, Date date) {
+        this.user = user;
         this.date = date;
         messageId = ++messageCount;
 
     }
 
+    public User getUser(){return user;}
     public int getMessageCount()
     {
         return messageCount;

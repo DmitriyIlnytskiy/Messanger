@@ -1,33 +1,49 @@
 package org.example.messanger;
 import java.io.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Chat implements Serializable {
     private String chatName;
     private List<User> users;
-    private List<BaseMessage> messages;
+    private Map<Integer, BaseMessage> messages;
+    private static int count = 0;
+    private int chatId;
 
     public Chat(String chatName)
     {
+        chatId = ++count;
         this.chatName = chatName;
         users    = new ArrayList<>();
-        messages = new ArrayList<>();
+        messages = new HashMap<>();
     }
-    public Chat(String chatName, List<User> users, List<BaseMessage> messages)
+    public Chat(String chatName, List<User> users, Map<Integer, BaseMessage> messages)
     {
+        chatId = ++count;
         this.chatName = chatName;
         this.users    = users;
         this.messages = messages;
     }
+    public int getChatId() {return chatId;}
     public void addMessage(BaseMessage message)
     {
-        messages.add(message);
+        messages.put(message.getMessageId(), message);
     }
+    public void deleteMessage(int id) {
+        messages.remove(id);
+    }
+
+    public void addUser(User user)
+    {
+        users.add(user);
+    }
+
    public ArrayList<FileMessage> getAllFileMessages()
    {
        ArrayList<FileMessage> temp = new ArrayList<>();
-       for(BaseMessage message : messages)
+       for(BaseMessage message : messages.values())
        {
            if(message instanceof FileMessage)
                temp.add((FileMessage) message);
@@ -37,7 +53,7 @@ public class Chat implements Serializable {
    public ArrayList<ImageMessage> getAllImageMessages()
    {
        ArrayList<ImageMessage> temp = new ArrayList<>();
-       for(BaseMessage message : messages)
+       for(BaseMessage message : messages.values())
        {
            if(message instanceof ImageMessage)
                temp.add((ImageMessage) message);
@@ -52,9 +68,9 @@ public class Chat implements Serializable {
            os.writeObject(this);
            System.out.println("File has been written");
        }
-       catch (Exception ex)
+       catch (Exception e)
        {
-           System.out.println(ex.getMessage());
+           System.out.println(e.getMessage());
        }
    }
    public static Chat loadFromFile(String fileName)
@@ -63,10 +79,11 @@ public class Chat implements Serializable {
        try(ObjectInputStream ois = new ObjectInputStream(new FileInputStream(fileName)))
        {
            System.out.println("File has been loaded");
+           //if(this.getClass() == ois.getClass())
             return (Chat)ois.readObject();
        }
-       catch (Exception ex) {
-           System.out.println(ex.getMessage());
+       catch (Exception e) {
+           System.out.println(e.getMessage());
        }
         return null;
    }
@@ -76,19 +93,26 @@ public class Chat implements Serializable {
        if(messages != null)
        {
            System.out.println("Messages: \n");
-           for (BaseMessage m : messages)
-               System.out.println(m.render());
+           for (BaseMessage m : messages.values())
+               System.out.println(messages.hashCode() + ". " + m.render());
        }
        else
            System.out.println("No messages are in chat");
    }
+   public void showUsers()
+   {
+       if(users != null)
+       {
+           System.out.println("Users: \n");
+           for (User m : users)
+               System.out.println("Id: " + m.getId() + " Name: " + m.getName());
+       }
+       else
+           System.out.println("No users are in chat");
+   }
    public List<BaseMessage> getMessages()
    {
-       List<BaseMessage> temp = new ArrayList<>();
-       if(messages != null) {
-           for (BaseMessage m : messages)
-               temp.add(m);
-       }
-       return temp;
+       return new ArrayList<>(messages.values());
    }
+   public String getChatName(){return chatName;}
 }

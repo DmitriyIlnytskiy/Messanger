@@ -1,12 +1,14 @@
 package org.example.messanger;
 
+import java.util.Date;
+
 //1.2.1 Inheritance
 public class LocationMessage extends BaseMessage{
     private String location;
 
-    public LocationMessage(String author, String date, String location) {
+    public LocationMessage(User user, Date date, String location) {
         //1.2.6 and 1.2.7 Use call of superclass method using super(Call of superclass constructor.)
-        super(author, date);
+        super(user, date);
         this.location = location;
     }
     public void setLocation(String location) {this.location=location;}
@@ -20,6 +22,6 @@ public class LocationMessage extends BaseMessage{
     //1.2.4 Method overriding
     @Override
     public String render() {
-        return author + " at (" + date + ")," + " shared a location: " + location;
+        return user.getName() + " at (" + date.toString() + ")," + " shared a location: " + location;
     }
 }

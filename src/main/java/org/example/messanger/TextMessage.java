@@ -1,13 +1,15 @@
 package org.example.messanger;
 
+import java.util.Date;
+
 //1.2.1 Inheritance
 public class TextMessage extends BaseMessage{
     //1.2.5 Use of private, protected, public
     private String content;
 
-    public TextMessage(String author, String date, String content) {
+    public TextMessage(User user, Date date, String content) {
         //1.2.6 and 1.2.7 Use call of superclass method using super(Call of superclass constructor.)
-        super(author, date);
+        super(user, date);
         this.content = content;
     }
     public void setContent(String content) {this.content=content;}
@@ -27,12 +29,12 @@ public class TextMessage extends BaseMessage{
     //1.2.4 Method overriding
     @Override
     public String render() {
-        return author + " at (" + date + "): " + content;
+        return user.getName() + " at (" + date + "): " + content;
     }
     // 1.2.3 Method Overloading
     @Override
     public String render(String additionalInfo) {
-        return "additionalInfo: " + additionalInfo + "\n" + author + " (" + date + "): \n" + content;
+        return "additionalInfo: " + additionalInfo + "\n" + user.getName() + " (" + date.toString() + "): \n" + content;
     }
 
 }

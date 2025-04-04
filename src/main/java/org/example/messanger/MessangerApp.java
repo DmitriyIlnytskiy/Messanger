@@ -1,6 +1,8 @@
 package org.example.messanger;
 
 import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
@@ -13,22 +15,41 @@ import javafx.stage.Stage;
 
 import java.io.File;
 import java.util.Date;
+import java.util.Optional;
+
+import static org.example.messanger.ChatServerTCP.PORT;
+import static org.example.messanger.ChatServerTCP.serverAdress;
 
 public class MessangerApp extends Application {
-    private Chat chat         = new Chat("Chat with UI");
-    //private Label statusLabel = new Label();
+    private Chat chat         = new Chat("Chat with GUI");
     private VBox messageList  = new VBox(10);
     private Popup messageMenu = new Popup();
-
     private BaseMessage clickedMessage;
+    private String userName;
+    private Label userNameLabel;
+    private User user;
+    private ChatClientTCP client;
+    private ScrollPane messageScrollPane; // ScrollPane for messageList
 
     public void start(Stage primaryStage)
     {
+        messageScrollPane = new ScrollPane(messageList); // Wrap messageList in ScrollPane
+        messageScrollPane.setPrefHeight(300); // Set fixed height
+        messageScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED); // Scrollbar as needed
+        messageScrollPane.setFitToWidth(true); // Stretch content to width
 
-        TextField authorField  = new TextField();
+        VBox scrollableMessageList = new VBox(messageScrollPane);
+        scrollableMessageList.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
+
+        userName = getUserName();
+
+        client = new ChatClientTCP(serverAdress, PORT, this, userName);
+
         TextField messageField = new TextField();
 
         HBox sendButtons = new HBox(10);
+        sendButtons.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
+
         Button sendTextMessageButton     = new Button("Send Text");
         Button sendImageMessageButton    = new Button("Send Image");
         Button sendVoiceMessageButton    = new Button("Send Voice");
@@ -44,14 +65,13 @@ public class MessangerApp extends Application {
                 sendContactMessageButton
                 );
 
-
         //Button actions
-        sendTextMessageButton.setOnAction(     e -> sendMessage(authorField, messageField, messageList, "Text"));
-        sendImageMessageButton.setOnAction(    e -> sendMessage(authorField, messageField, messageList, "Image"));
-        sendVoiceMessageButton.setOnAction(    e -> sendMessage(authorField, messageField, messageList, "Voice"));
-        sendFileMessageButton.setOnAction(     e -> sendMessage(authorField, messageField, messageList, "File"));
-        sendLocationMessageButton.setOnAction( e -> sendMessage(authorField, messageField, messageList, "Location"));
-        sendContactMessageButton.setOnAction(  e -> sendMessage(authorField, messageField, messageList, "Contact"));
+        sendTextMessageButton.setOnAction(     e -> sendMessage(messageField, messageList, "Text"));
+        sendImageMessageButton.setOnAction(    e -> sendMessage(messageField, messageList, "Image"));
+        sendVoiceMessageButton.setOnAction(    e -> sendMessage(messageField, messageList, "Voice"));
+        sendFileMessageButton.setOnAction(     e -> sendMessage(messageField, messageList, "File"));
+        sendLocationMessageButton.setOnAction( e -> sendMessage(messageField, messageList, "Location"));
+        sendContactMessageButton.setOnAction(  e -> sendMessage(messageField, messageList, "Contact"));
 
         //Popup menu
         HBox menuItems = new HBox(5);
@@ -69,16 +89,17 @@ public class MessangerApp extends Application {
         TextField fileTextField = new TextField();
 
         Button saveButton = new Button("Save to File");
+        saveButton.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
         Button loadButton = new Button("Load from File");
+        loadButton.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
 
         saveButton.setOnAction(e->handleSaveToFile(fileTextField.getText().trim()));
         loadButton.setOnAction(e->handleLoadFromFile(fileTextField.getText().trim()));
 
-
-
         //layout
         VBox root = new VBox(10);
-        root.getChildren().addAll( messageList, new Label("Author Name:"), authorField, new Label("Write your message") ,
+        userNameLabel = new Label("Your name is : Waiting for server..."); // Initialize the Label
+        root.getChildren().addAll( scrollableMessageList, userNameLabel, new Label("Write your message") ,
                 messageField,
                 sendButtons,
                 new Label("File Name:"), fileTextField, saveButton,
@@ -87,22 +108,90 @@ public class MessangerApp extends Application {
         );
 
         // Scene and Stage setup
-        Scene scene = new Scene(root, 800, 800);
+        Scene scene = new Scene(root, 550, 600);
+
         primaryStage.setScene(scene);
         primaryStage.setTitle("Messenger");
 
-        primaryStage.setMinWidth(900);
-        primaryStage.setMinHeight(900);
+        primaryStage.setMinWidth(550);
+        primaryStage.setMinHeight(400);
 
         //scene.getStylesheets().add("styles.css");
 
         primaryStage.show();
     }
 
+    public void receiveUserFromServer(User user)
+    {
+        Platform.runLater(()-> {
+            this.user = user;
+            // Update the UI label when server send user
+            userNameLabel.setText("Your name is : " + user.getName() + " (ID: " + user.getId() + ")");
+        });
+    }
+
+    public void receiveMessageFromServer(BaseMessage message)
+    {
+        //Wrap the UI updates within the receiveChatFromServer() method inside a Platform.runLater() call
+        //modify the JavaFX messageList from a background thread (the startListening() thread), is not allowed.
+        Platform.runLater(()-> {
+            chat.addMessage(message);
+            messageList.getChildren().add(createMessageStackPane(message));
+        });
+
+    }
+    public void receiveChatFromServer(Chat updatedChat)
+    {
+        Platform.runLater(()-> {
+            this.chat = updatedChat;
+            messageList.getChildren().clear();
+            for (BaseMessage message : chat.getMessages())
+                messageList.getChildren().add(createMessageStackPane(message));
+        });
+    }
+    public void receiveJoinGreetings(String joinGreetings)
+    {
+        Platform.runLater(()-> {
+            Label label = new Label(joinGreetings);
+            messageList.getChildren().add(label);
+        });
+    }
+
+    private String getUserName()
+    {
+        while (true) //when user types name -> return from here
+        {
+            TextInputDialog dialog = new TextInputDialog("author1");
+            dialog.setTitle("Authorname Input");
+            dialog.setHeaderText("Enter your authorname");
+            dialog.setContentText("Authorname:");
+
+            //wrap data for avoiding null-checks
+            Optional<String> result = dialog.showAndWait();
+
+            if (result.isPresent() && !result.get().trim().isEmpty()) {
+                //Exit
+                return result.get().trim();
+            } else {
+                showError("Authorname input canceled or empty. Please try again.");
+                // delay to avoid excessive looping
+                try {
+                    Thread.sleep(500); // 0.5 seconds
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }
+    }
 
     private void handleDelete()
     {
         if (clickedMessage == null) return;
+        if (!clickedMessage.getUser().equals(user)) {
+            showError("You can only delete your own messages.");
+            return;
+        }
 
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
         confirmation.setTitle("Delete Message");
@@ -132,6 +221,10 @@ public class MessangerApp extends Application {
     private void handleEdit()
     {
         if(clickedMessage == null) return;
+        if (!clickedMessage.getUser().equals(user)) {
+            showError("You can only edit your own messages.");
+            return;
+        }
 
         TextInputDialog dialog = new TextInputDialog(clickedMessage.showData());
         dialog.setTitle("Edit Message");
@@ -239,49 +332,46 @@ public class MessangerApp extends Application {
         }
     }
 
-    private void sendMessage(TextField authorField, TextField messageField, VBox messageList, String type) {
+    private void sendMessage(TextField messageField, VBox messageList, String type) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Input Error");
         alert.setHeaderText(null);
 
-        String authorName = authorField.getText().trim();
-        if (authorName.isEmpty()) {
-            alert.setContentText("Author's name cannot be empty!");
-            alert.showAndWait();
-        }
-        else if(messageField.getText().isEmpty())
+        if(messageField.getText().isEmpty())
         {
             alert.setContentText("Message field cannot be empty!");
             alert.showAndWait();
         }
         else {
             String messageContent = messageField.getText();
-            String date = new Date().toString();
+            Date date = new Date();
 
             BaseMessage message;
             switch (type) {
                 case "Text":
-                    message = new TextMessage(authorName, date, messageContent);
+                    message = new TextMessage(user, date, messageContent);
                     break;
                 case "Image":
-                    message = new ImageMessage(authorName, date, messageContent);
+                    message = new ImageMessage(user, date, messageContent);
                     break;
                 case "Voice":
-                    message = new VoiceMessage(authorName, date, messageContent);
+                    message = new VoiceMessage(user, date, messageContent);
                     break;
                 case "File":
-                    message = new FileMessage(authorName, date, messageContent);
+                    message = new FileMessage(user, date, messageContent);
                     break;
                 case "Location":
-                    message = new LocationMessage(authorName, date, messageContent);
+                    message = new LocationMessage(user, date, messageContent);
                     break;
                 case "Contact":
-                    message = new ContactMessage(authorName, date, messageContent);
+                    message = new ContactMessage(user, date, messageContent);
                     break;
                 default:
                     return;
             }
 
+            //send to server
+            client.sendMessageToServer(message);
             //adding message to Chat
             chat.addMessage(message);
             //adding message to (VBox) - UI list
@@ -290,7 +380,8 @@ public class MessangerApp extends Application {
             messageField.clear();
         }
     }
-    //Creating UI message(clickable)
+
+    //Creating GUI message(clickable)
     private StackPane createMessageStackPane(BaseMessage message)
     {
         StackPane messageStackPane = new StackPane();
@@ -305,7 +396,9 @@ public class MessangerApp extends Application {
         messageStackPane.setOnMouseClicked(event -> {
             clickedMessage = message;
             // event.getScreenX() and event.getScreenY() are used to position the Popup relative to the screen, not the window
-            messageMenu.show(messageStackPane, event.getScreenX(), event.getScreenY());
+            if(message.getUser().equals(user)) {
+                messageMenu.show(messageStackPane, event.getScreenX(), event.getScreenY());
+            }
         });
 
         return messageStackPane;
