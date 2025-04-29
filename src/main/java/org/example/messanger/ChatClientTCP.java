@@ -1,14 +1,8 @@
 package org.example.messanger;
 
-
-import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.control.Label;
-import javafx.stage.Stage;
-
 import java.io.*;
 import java.net.Socket;
-import java.util.Date;
 
 // the application's representative on the client side.
 public class ChatClientTCP {
@@ -54,23 +48,30 @@ public class ChatClientTCP {
             try{
                 while (!socket.isClosed()) {
                     Object received = inputStream.readObject();
-                    if(received instanceof User) {
-                        this.user = (User) received;
-                        Platform.runLater(() -> app.receiveUserFromServer((User) received));
-                    }
-                    else if (received instanceof BaseMessage) {
-                        //Platform.runLater() ensures that the code is executed on the JavaFX Application Thread.
-                        Platform.runLater(() -> app.receiveMessageFromServer((BaseMessage) received));
-                        System.out.println("Client: " + user.getName() + " :receiveMessageFromServer");
-                    }
-                    else if (received instanceof Chat) {
-                        Platform.runLater(() -> app.receiveChatFromServer((Chat) received));
-                        System.out.println("Client: " + user.getName() + " :receiveChatFromServer");
-                    }
-                    else if(received instanceof String)
+                    switch (received)
                     {
-                        Platform.runLater(()->app.receiveJoinGreetings((String) received));
-                        System.out.println("Client: receiveJoinLabel: " + ((String) received));
+                        case User user:
+                            this.user = user;
+                            Platform.runLater(() -> app.receiveUserFromServer(user));
+                            break;
+                        case Messageable baseMessage:
+                            //Platform.runLater() ensures that the code is executed on the JavaFX Application Thread.
+                            Platform.runLater(() -> app.receiveMessageFromServer(baseMessage));
+                            System.out.println("Client: " + user.getName() + " :receiveMessageFromServer");
+                            break;
+                        case Chat chat:
+                            Platform.runLater(() -> app.receiveChatFromServer(chat));
+                            System.out.println("Client: " + user.getName() + " :receiveChatFromServer");
+                            break;
+                        case ServerResponse response:
+                            //server.editAnswer(request);
+                            break;
+                        case String str:
+                            Platform.runLater(()->app.receiveJoinGreetings(str));
+                            System.out.println("Client: receiveJoinGreetings: " + str);
+                            break;
+                        default:
+                            System.out.println("Received wrong type");
                     }
                 }
 
@@ -110,10 +111,20 @@ public class ChatClientTCP {
             e.printStackTrace();
         }
     }
-    public void sendMessageToServer(BaseMessage message)
+    public void sendMessageToServer(Messageable message)
     {
         try {
             outputStream.writeObject(message);
+            outputStream.flush();
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    public void sendRequestToServer(ClientRequest request)
+    {
+        try {
+            outputStream.writeObject(request);
             outputStream.flush();
 
         } catch (IOException e) {

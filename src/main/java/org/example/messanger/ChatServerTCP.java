@@ -1,16 +1,18 @@
 package org.example.messanger;
 
-import javafx.scene.control.Label;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
 public class ChatServerTCP {
+    public static final int PORT            = 12345;
+    public static final String serverAdress = "localhost";
+
     private ServerSocket serverSocket;
     private List<ChatClientHandlerTCP> clients = new LinkedList<>();
     private Chat chat;
@@ -53,7 +55,6 @@ public class ChatServerTCP {
 
                      ////////////////
                      // Assign unique ID from server
-
                      User user = new User(userName, ++userCount);
                      ////////////////
                      System.out.println("Server: Client \"" + user.getName() + "\"  has connected");
@@ -81,17 +82,59 @@ public class ChatServerTCP {
          }).start();
 
      }
-     public void broadcastMessage(ChatClientHandlerTCP sender, BaseMessage message)
+     public void broadcastMessage(ChatClientHandlerTCP sender, Messageable receivedMessage)
      {
-         chat.addMessage(message); // Add the message to the chat
-
          if(clients == null)
              return;
+
+         User senderUser = sender.getUser();
+         Date timestamp = receivedMessage.getDate();
+         String content;
+
+         Messageable serverCreatedMessage;
+
+         // Extract content based on the type of the received message
+         switch (receivedMessage) {
+             case TextMessage textMessage:
+                 content = textMessage.getContent();
+                 serverCreatedMessage = new TextMessage(senderUser, timestamp, content);
+                 break;
+             case ImageMessage imageMessage:
+                 content = imageMessage.getImageUrl();
+                 serverCreatedMessage = new ImageMessage(senderUser, timestamp, content);
+                 break;
+             case VoiceMessage voiceMessage:
+                 content = voiceMessage.getAudioUrl();
+                 serverCreatedMessage = new VoiceMessage(senderUser, timestamp, content);
+                 break;
+             case FileMessage fileMessage:
+                 content = fileMessage.getFileName();
+                 serverCreatedMessage = new FileMessage(senderUser, timestamp, content);
+                 break;
+             case LocationMessage locationMessage:
+                 content = locationMessage.getLocation();
+                 serverCreatedMessage = new LocationMessage(senderUser, timestamp, content);
+                 break;
+             case ContactMessage contactMessage:
+                 content = contactMessage.getContact();
+                 serverCreatedMessage = new ContactMessage(senderUser, timestamp, content);
+                 break;
+             default:
+                 System.out.println("Server: Unknown message type received: " + receivedMessage.getClass().getName());
+                 return;
+         }
+         if (serverCreatedMessage == null) {
+             System.out.println("Server: serverCreatedMessage = null");
+             return;
+         }
+
+         chat.addMessage(serverCreatedMessage);// Add the message to the chat
+
          System.out.println("Server: broadcastMessage");
          for(ChatClientHandlerTCP client : clients)
-             if(!client.equals(sender))
-                 client.sendMessageToClient(message);
+                 client.sendMessageToClient(serverCreatedMessage);
      }
+
      public void broadcastChatUpdate(Chat updatedChat)
      {
          chat = updatedChat;
@@ -112,11 +155,11 @@ public class ChatServerTCP {
 
          System.out.println("Server: broadcastJoinLabel");
          for(ChatClientHandlerTCP client : clients) {
-             if (!client.equals(sender)) {
-                 client.sendJoinGreetingsToClient(notifyClients);
-             } else if (client.equals(sender)) {
+             if (client.equals(sender))
                  client.sendJoinGreetingsToClient(greetSender);
-             }
+              else
+                 client.sendJoinGreetingsToClient(notifyClients);
+
          }
 
      }
@@ -141,10 +184,58 @@ public class ChatServerTCP {
          }catch (IOException e)
          {
              e.printStackTrace();
+
          }
      }
-    public static final int PORT            = 12345;
-    public static final String serverAdress = "localhost";
+     public void editResponse(ChatClientHandlerTCP requester, EditRequest editRequest)
+     {
+         System.out.println("Server: EditRequest's message ID is: " + editRequest.getMessage().getMessageId());
+         if(editRequest == null) {
+             requester.giveResponseToClient(new EditResponse(false, "Edit request is null"));
+             return;
+         }
+         else if(!requester.getUser().equals(editRequest.getRequester())) {
+             requester.giveResponseToClient(new EditResponse(false, "Edit request's user is not a user who can be a requester"));
+             return;
+         }
+
+         Messageable message = chat.findMessageById(editRequest.getMessage().getMessageId());
+         System.out.println("Server: created message on server(for editing) ID is: " + message.getMessageId());
+
+         switch (message) {
+             case TextMessage textMessage:
+                 textMessage.setContent(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             case ContactMessage contactMessage:
+                 contactMessage.setContact(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             case ImageMessage imageMessage:
+                 imageMessage.setImageUrl(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             case VoiceMessage voiceMessage:
+                 voiceMessage.setAudioUrl(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             case LocationMessage locationMessage:
+                 locationMessage.setLocation(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             case FileMessage fileMessage:
+                 fileMessage.setFileName(editRequest.getContent());
+                 broadcastChatUpdate(chat);
+                 break;
+             default:
+                  requester.giveResponseToClient(new EditResponse(false, "Unsupported message type for edit."));
+         }
+         requester.giveResponseToClient(new EditResponse(true,"message: " + message.getMessageId() + " edited!"));
+     }
+     public void deleteResponse(ChatClientHandlerTCP requester, DeleteRequest deleteRequest)
+     {
+
+     }
 
     public static void main(String[] args) {
         ChatServerTCP server = new ChatServerTCP(PORT);

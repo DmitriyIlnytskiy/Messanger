@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import java.io.File;
 import java.util.Date;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static org.example.messanger.ChatServerTCP.PORT;
 import static org.example.messanger.ChatServerTCP.serverAdress;
@@ -24,24 +25,29 @@ public class MessangerApp extends Application {
     private Chat chat         = new Chat("Chat with GUI");
     private VBox messageList  = new VBox(10);
     private Popup messageMenu = new Popup();
-    private BaseMessage clickedMessage;
-    private String userName;
+    private Messageable clickedMessage;
     private Label userNameLabel;
     private User user;
     private ChatClientTCP client;
-    private ScrollPane messageScrollPane; // ScrollPane for messageList
+    // using CompletableFuture fixed race condition by explicitly waiting for the User object to be received before executing UI code
+    // in receiveChatFromServer that depended on User
+    // Receiving the User and the initial Chat object from the server are ASYNCHRONOUS operations happening on a background thread, so
+    // Without explicit synchronization, the receiveChatFromServer method INVOKED and try to use the USER field in MessangerApp BEFORE
+    // the receiveUserFromServer method had a chance to receive and SET USER field. This led to the NullPointerException
+    private CompletableFuture<User> userFuture = new CompletableFuture<>();
 
     public void start(Stage primaryStage)
     {
-        messageScrollPane = new ScrollPane(messageList); // Wrap messageList in ScrollPane
-        messageScrollPane.setPrefHeight(300); // Set fixed height
-        messageScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED); // Scrollbar as needed
-        messageScrollPane.setFitToWidth(true); // Stretch content to width
+        // ScrollPane for wrap messageList(create scrollable interface)
+        ScrollPane messageScrollPane = new ScrollPane(messageList); // Wrap messageList in ScrollPane
+        messageScrollPane.setPrefHeight(300);
+        messageScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        messageScrollPane.setFitToWidth(true);
 
         VBox scrollableMessageList = new VBox(messageScrollPane);
         scrollableMessageList.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
 
-        userName = getUserName();
+        String userName = getUserName();
 
         client = new ChatClientTCP(serverAdress, PORT, this, userName);
 
@@ -66,12 +72,12 @@ public class MessangerApp extends Application {
                 );
 
         //Button actions
-        sendTextMessageButton.setOnAction(     e -> sendMessage(messageField, messageList, "Text"));
-        sendImageMessageButton.setOnAction(    e -> sendMessage(messageField, messageList, "Image"));
-        sendVoiceMessageButton.setOnAction(    e -> sendMessage(messageField, messageList, "Voice"));
-        sendFileMessageButton.setOnAction(     e -> sendMessage(messageField, messageList, "File"));
-        sendLocationMessageButton.setOnAction( e -> sendMessage(messageField, messageList, "Location"));
-        sendContactMessageButton.setOnAction(  e -> sendMessage(messageField, messageList, "Contact"));
+        sendTextMessageButton.setOnAction(     e -> sendMessage(messageField,"Text"));
+        sendImageMessageButton.setOnAction(    e -> sendMessage(messageField,"Image"));
+        sendVoiceMessageButton.setOnAction(    e -> sendMessage(messageField,"Voice"));
+        sendFileMessageButton.setOnAction(     e -> sendMessage(messageField,"File"));
+        sendLocationMessageButton.setOnAction( e -> sendMessage(messageField,"Location"));
+        sendContactMessageButton.setOnAction(  e -> sendMessage(messageField,"Contact"));
 
         //Popup menu
         HBox menuItems = new HBox(5);
@@ -116,7 +122,6 @@ public class MessangerApp extends Application {
         primaryStage.setMinWidth(550);
         primaryStage.setMinHeight(400);
 
-        //scene.getStylesheets().add("styles.css");
 
         primaryStage.show();
     }
@@ -125,12 +130,14 @@ public class MessangerApp extends Application {
     {
         Platform.runLater(()-> {
             this.user = user;
+            //compllete future
+            userFuture.complete(user);
             // Update the UI label when server send user
             userNameLabel.setText("Your name is : " + user.getName() + " (ID: " + user.getId() + ")");
         });
     }
 
-    public void receiveMessageFromServer(BaseMessage message)
+    public void receiveMessageFromServer(Messageable message)
     {
         //Wrap the UI updates within the receiveChatFromServer() method inside a Platform.runLater() call
         //modify the JavaFX messageList from a background thread (the startListening() thread), is not allowed.
@@ -140,15 +147,30 @@ public class MessangerApp extends Application {
         });
 
     }
-    public void receiveChatFromServer(Chat updatedChat)
-    {
-        Platform.runLater(()-> {
-            this.chat = updatedChat;
-            messageList.getChildren().clear();
-            for (BaseMessage message : chat.getMessages())
-                messageList.getChildren().add(createMessageStackPane(message));
-        });
+    public void receiveChatFromServer(Chat updatedChat) {
+        userFuture.thenAcceptAsync(currentUser -> { // Execute asynchronously after user is received
+            Platform.runLater(() -> {
+                System.out.println("Client (CompletableFuture: userFuture.thenAcceptAsync)");
+                System.out.println("Client (" + currentUser.getName() + "): receiveChatFromServer called. Chat object: " + updatedChat);
+                System.out.println("Client (" + currentUser.getName() + "): Number of messages in updatedChat: " + updatedChat.getMessages().size());
+                this.chat = updatedChat;
+                updateMessageDisplay();
+                System.out.println("Client (" + currentUser.getName() + "): receiveChatFromServer finished");
+            });
+        }, Platform::runLater); // Ensure the thenAccept runs on the JavaFX thread
     }
+    private void updateMessageDisplay() {
+        if (user == null) {
+            System.out.println("Client: updateMessageDisplay called before user was received");
+            return;
+        }
+        messageList.getChildren().clear();
+        for (Messageable message : chat.getMessages()) {
+            messageList.getChildren().add(createMessageStackPane(message));
+        }
+    }
+
+
     public void receiveJoinGreetings(String joinGreetings)
     {
         Platform.runLater(()-> {
@@ -161,7 +183,7 @@ public class MessangerApp extends Application {
     {
         while (true) //when user types name -> return from here
         {
-            TextInputDialog dialog = new TextInputDialog("author1");
+            TextInputDialog dialog = new TextInputDialog("author");
             dialog.setTitle("Authorname Input");
             dialog.setHeaderText("Enter your authorname");
             dialog.setContentText("Authorname:");
@@ -218,6 +240,7 @@ public class MessangerApp extends Application {
         });
     }
 
+
     private void handleEdit()
     {
         if(clickedMessage == null) return;
@@ -233,6 +256,8 @@ public class MessangerApp extends Application {
 
         dialog.showAndWait();
 
+        client.sendRequestToServer(new EditRequest(user,clickedMessage,dialog.getEditor().getText()));
+        //if()
         switch (clickedMessage) {
             case TextMessage textMessage:
             {
@@ -272,7 +297,7 @@ public class MessangerApp extends Application {
             }
             default:
             {
-                showError("Unknown message type");
+                showError("Edit message error");
             }
             messageMenu.hide();
         }
@@ -280,16 +305,20 @@ public class MessangerApp extends Application {
 
     private void updateMessageList(BaseMessage message)
     {
+        String previous_state = "";
         for (int i = 0; i < messageList.getChildren().size(); i++) {
             StackPane messagePane = (StackPane) messageList.getChildren().get(i);
             // Find Label by message ID
             Label messageLabel = (Label) messagePane.lookup("#" + message.getMessageId());
 
             if (messageLabel != null) {
+                previous_state = messageLabel.getText();
                 messageLabel.setText(message.render());
-                showSuccess("Message Updated");
                 break;
             }
+        }
+        if(previous_state != message.render() ) {
+            showSuccess("Message Updated");
         }
     }
 
@@ -315,12 +344,12 @@ public class MessangerApp extends Application {
             if (!file.exists()) {
                 showError("File does not exist!");
             } else {
-                Chat loadedChat = chat.loadFromFile(fileName);
+                Chat loadedChat = Chat.loadFromFile(fileName);
                 if (loadedChat != null) {
                     chat = loadedChat;
                     messageList.getChildren().clear();
 
-                    for (BaseMessage message : chat.getMessages()) {
+                    for (Messageable message : chat.getMessages()) {
                         messageList.getChildren().add(createMessageStackPane(message));
                     }
                     showSuccess("Loaded");
@@ -332,21 +361,16 @@ public class MessangerApp extends Application {
         }
     }
 
-    private void sendMessage(TextField messageField, VBox messageList, String type) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle("Input Error");
-        alert.setHeaderText(null);
+    private void sendMessage(TextField messageField, String type) {
 
         if(messageField.getText().isEmpty())
-        {
-            alert.setContentText("Message field cannot be empty!");
-            alert.showAndWait();
-        }
+            showError("Message field cannot be empty!");
+
         else {
             String messageContent = messageField.getText();
             Date date = new Date();
 
-            BaseMessage message;
+            Messageable message;
             switch (type) {
                 case "Text":
                     message = new TextMessage(user, date, messageContent);
@@ -372,22 +396,28 @@ public class MessangerApp extends Application {
 
             //send to server
             client.sendMessageToServer(message);
-            //adding message to Chat
-            chat.addMessage(message);
-            //adding message to (VBox) - UI list
-            messageList.getChildren().add(createMessageStackPane(message));
+            //adding message to local Chat
+            //chat.addMessage(message);
+            //adding message to (VBox) - GUI list
+            //messageList.getChildren().add(createMessageStackPane(message));
 
             messageField.clear();
         }
     }
 
     //Creating GUI message(clickable)
-    private StackPane createMessageStackPane(BaseMessage message)
+    private StackPane createMessageStackPane(Messageable message)
     {
         StackPane messageStackPane = new StackPane();
         Rectangle background = new Rectangle(200,60, Color.GRAY);
-        Label text = new Label(message.render());
 
+        String displayText = "Unknown User";
+        if (message.getUser() != null) {
+            displayText = message.render();
+        } else {
+            System.err.println("Warning: Message with ID " + message.getMessageId() + " has a null User.");
+        }
+        Label text = new Label(displayText);
         //setting id of message to label for uniquely connect each message with each StackPane
         text.setId(Integer.toString(message.getMessageId()));
 
@@ -420,7 +450,7 @@ public class MessangerApp extends Application {
         //statusLabel.setText("Error: " + message);
         //.setTextFill(Color.RED);
 
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Error");
         alert.setHeaderText(null);
         alert.setContentText("Error: " + message);
@@ -430,5 +460,4 @@ public class MessangerApp extends Application {
     public static void main(String[] args) {
         launch(args);
     }
-
 }

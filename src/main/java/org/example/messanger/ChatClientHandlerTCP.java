@@ -1,7 +1,5 @@
 package org.example.messanger;
 
-import javafx.scene.control.Label;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -76,11 +74,22 @@ public class ChatClientHandlerTCP implements Runnable{
                     break;
                 }
 
-                if(received instanceof BaseMessage) {
-                    server.broadcastMessage(this, (BaseMessage) received);
-                }
-                else if(received instanceof Chat) {
-                    server.broadcastChatUpdate((Chat) received);
+                switch (received)
+                {
+                    case Messageable baseMessage:
+                        server.broadcastMessage(this, baseMessage);
+                        break;
+                    case Chat chat:
+                        server.broadcastChatUpdate(chat);
+                        break;
+                    case EditRequest editRequest:
+                        server.editResponse(this, editRequest);
+                        break;
+                    case DeleteRequest deleteRequest:
+                        server.deleteResponse(this, deleteRequest);
+                        break;
+                    default:
+                        System.out.println("Received wrong type");
                 }
             }
         }catch (IOException | ClassNotFoundException e)
@@ -91,7 +100,7 @@ public class ChatClientHandlerTCP implements Runnable{
             server.removeClient(this);
         }
     }
-    public void sendMessageToClient(BaseMessage message)
+    public void sendMessageToClient(Messageable message)
     {
         System.out.println("ClientHandler: sendMessageToClient: " + user.getName());
         if(outputStream !=null)
@@ -147,6 +156,20 @@ public class ChatClientHandlerTCP implements Runnable{
         }
         else
             System.out.println("ClientHandler: setUserForClient: ObjectOutputStream = null");
+    }
+    public void giveResponseToClient(ServerResponse serverResponse)
+    {
+        if(outputStream != null) {
+            System.out.println("ClientHandler: giveResponseToClient: " + serverResponse.getInformation());
+            try {
+                outputStream.writeObject(serverResponse);
+                outputStream.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        else
+            System.out.println("ClientHandler: giveResponseToClient: ObjectOutputStream = null");
     }
 
     public User getUser() {
