@@ -3,6 +3,7 @@ package org.example.messanger;
 import javafx.application.Platform;
 import java.io.*;
 import java.net.Socket;
+import java.util.concurrent.CompletableFuture;
 
 // the application's representative on the client side.
 public class ChatClientTCP {
@@ -15,8 +16,10 @@ public class ChatClientTCP {
     private ObjectInputStream inputStream;
     private ObjectOutputStream outputStream;
 
+    private CompletableFuture<User> usernameResultFuture;
 
-    public ChatClientTCP(String serverAdress, int port, MessangerApp app, String userName)
+
+    public ChatClientTCP(String serverAdress, int port, MessangerApp app)
     {
         this.app = app;
         try{
@@ -28,8 +31,6 @@ public class ChatClientTCP {
             //Java's serialization requires the ObjectOutputStream to be created before ObjectInputStream
             outputStream = new ObjectOutputStream(socket.getOutputStream());
             System.out.println("Client: OutputStream created.");
-
-            sendUserNameToServer(userName);
 
             inputStream = new ObjectInputStream(socket.getInputStream());
             System.out.println("Client: InputStream created.");
@@ -50,9 +51,19 @@ public class ChatClientTCP {
                     Object received = inputStream.readObject();
                     switch (received)
                     {
-                        case User user:
-                            this.user = user;
-                            Platform.runLater(() -> app.receiveUserFromServer(user));
+                        case UserIsValidResponse userValidResponse:
+                            if (usernameResultFuture != null) {
+                                //success
+                                if (userValidResponse.isSuccess()) {
+                                    this.user = userValidResponse.getUser();
+                                    usernameResultFuture.complete(userValidResponse.getUser());
+                                }
+                                //failure
+                                else {
+                                    usernameResultFuture.complete(null);
+                                }
+                                usernameResultFuture = null;
+                            }
                             break;
                         case Messageable baseMessage:
                             //Platform.runLater() ensures that the code is executed on the JavaFX Application Thread.
@@ -63,8 +74,23 @@ public class ChatClientTCP {
                             Platform.runLater(() -> app.receiveChatFromServer(chat));
                             System.out.println("Client: " + user.getName() + " :receiveChatFromServer");
                             break;
-                        case ServerResponse response:
-                            //server.editAnswer(request);
+                        case EditResponse response:
+                            if (response.isSuccess()) {
+                                System.out.println("Client: Edit successful: " + response.getInformation());
+                                Platform.runLater(() -> app.showSuccess("Edit successful"));
+                            } else {
+                                System.out.println("Client: Edit failed: " + response.getInformation());
+                                Platform.runLater(() -> app.showError("Edit failed"));
+                            }
+                            break;
+                        case DeleteResponse response:
+                            if (response.isSuccess()) {
+                                System.out.println("Client: Delete successful: " + response.getInformation());
+                                Platform.runLater(() -> app.showSuccess("Delete successful"));
+                            } else {
+                                System.out.println("Client: Delete failed: " + response.getInformation());
+                                Platform.runLater(() -> app.showError("Delete failed"));
+                            }
                             break;
                         case String str:
                             Platform.runLater(()->app.receiveJoinGreetings(str));
@@ -102,14 +128,21 @@ public class ChatClientTCP {
         }
     }
 
-    public void sendUserNameToServer(String userName)
+    public CompletableFuture<User> sendUserNameToServer(String userName)
     {
+        //make sure to cancel any stale futures
+        if (usernameResultFuture != null && !usernameResultFuture.isDone()) {
+            usernameResultFuture.complete(null);
+        }
+
+        usernameResultFuture = new CompletableFuture<>();
         try{
             outputStream.writeObject(userName);
             outputStream.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return usernameResultFuture;
     }
     public void sendMessageToServer(Messageable message)
     {

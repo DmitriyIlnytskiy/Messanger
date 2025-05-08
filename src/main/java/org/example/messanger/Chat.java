@@ -112,6 +112,10 @@ public class Chat implements Serializable {
    {
        return new ArrayList<>(messages);
    }
+   public List<User> getUsers()
+   {
+       return new ArrayList<>(users);
+   }
 
    public String getChatName(){return chatName;}
 

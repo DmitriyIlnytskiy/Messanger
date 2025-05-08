@@ -51,12 +51,15 @@ public class ChatServerTCP {
                      ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
                      System.out.println("Server: ObjectInputStream created.");
 
-                     String userName = (String) inputStream.readObject();
-
+                     User user = null;
+                     while(user == null && !clientSocket.isClosed()) {
+                         String userName = (String) inputStream.readObject();
+/*
                      ////////////////
                      // Assign unique ID from server
                      User user = new User(userName, ++userCount);
                      ////////////////
+
                      System.out.println("Server: Client \"" + user.getName() + "\"  has connected");
 
                      chat.addUser(user);
@@ -72,6 +75,44 @@ public class ChatServerTCP {
                      }
                      broadcastJoinGreetings(clientHandler);
                      broadcastChatUpdate(chat);
+*/
+
+                         boolean nameExists = false;
+                         for (User existingUser : chat.getUsers()) {
+                             if (existingUser.getName().equals(userName)) {
+                                 nameExists = true;
+                                 break;
+                             }
+                         }
+
+                         //success
+                         if (!nameExists) {
+                             user = new User(userName, ++userCount);
+                             System.out.println("Server: Client \"" + user.getName() + "\" has connected");
+                             chat.addUser(user);
+                             ChatClientHandlerTCP clientHandler = new ChatClientHandlerTCP(clientSocket, this, user, inputStream, outputStream);
+                             if (clientHandler != null) {
+                                 clients.add(clientHandler);
+                                 setUserForClient(clientHandler, user);
+                                 clientHandler.start();
+                                 outputStream.writeObject(new UserIsValidResponse(true, "Username is valid", user)); // Send success response with User
+                                 outputStream.flush();
+                                 broadcastJoinGreetings(clientHandler);
+                                 broadcastChatUpdate(chat);
+                             } else {
+                                 System.out.println("Failed to create client handler for " + user.getName());
+                             }
+                         }
+                         //failure
+                         else {
+                             System.out.println("Server: Duplicate username attempt: " + userName);
+                             outputStream.writeObject(new UserIsValidResponse(false, "This username is already taken", null)); // Send failure response
+                             outputStream.flush();
+                             //clientSocket.close();
+                         }
+                     }
+
+
                  }
              } catch (IOException  | ClassNotFoundException e) {
                  e.printStackTrace();
@@ -187,20 +228,18 @@ public class ChatServerTCP {
 
          }
      }
-     public void editResponse(ChatClientHandlerTCP requester, EditRequest editRequest)
-     {
+     public void editResponse(ChatClientHandlerTCP requester, EditRequest editRequest) {
          System.out.println("Server: EditRequest's message ID is: " + editRequest.getMessage().getMessageId());
-         if(editRequest == null) {
+         if (editRequest == null) {
              requester.giveResponseToClient(new EditResponse(false, "Edit request is null"));
              return;
-         }
-         else if(!requester.getUser().equals(editRequest.getRequester())) {
+         } else if (!requester.getUser().equals(editRequest.getRequester())) {
              requester.giveResponseToClient(new EditResponse(false, "Edit request's user is not a user who can be a requester"));
              return;
          }
 
          Messageable message = chat.findMessageById(editRequest.getMessage().getMessageId());
-         System.out.println("Server: created message on server(for editing) ID is: " + message.getMessageId());
+         System.out.println("Server: created message for identify ID of requested message on server(for editing) ID is: " + message.getMessageId());
 
          switch (message) {
              case TextMessage textMessage:
@@ -228,9 +267,11 @@ public class ChatServerTCP {
                  broadcastChatUpdate(chat);
                  break;
              default:
-                  requester.giveResponseToClient(new EditResponse(false, "Unsupported message type for edit."));
+                 requester.giveResponseToClient(new EditResponse(false, "Unsupported message type for edit"));
+                 return;
          }
-         requester.giveResponseToClient(new EditResponse(true,"message: " + message.getMessageId() + " edited!"));
+         System.out.println("Server: message on server was EDITED ID is: " + message.getMessageId());
+         requester.giveResponseToClient(new EditResponse(true, "message: " + message.getMessageId() + " edited!"));
      }
      public void deleteResponse(ChatClientHandlerTCP requester, DeleteRequest deleteRequest)
      {

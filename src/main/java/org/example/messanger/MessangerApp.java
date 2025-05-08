@@ -17,6 +17,9 @@ import java.io.File;
 import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.example.messanger.ChatServerTCP.PORT;
 import static org.example.messanger.ChatServerTCP.serverAdress;
@@ -38,6 +41,7 @@ public class MessangerApp extends Application {
 
     public void start(Stage primaryStage)
     {
+        userNameLabel = new Label("Client: Waiting for input");
         // ScrollPane for wrap messageList(create scrollable interface)
         ScrollPane messageScrollPane = new ScrollPane(messageList); // Wrap messageList in ScrollPane
         messageScrollPane.setPrefHeight(300);
@@ -47,9 +51,7 @@ public class MessangerApp extends Application {
         VBox scrollableMessageList = new VBox(messageScrollPane);
         scrollableMessageList.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
 
-        String userName = getUserName();
-
-        client = new ChatClientTCP(serverAdress, PORT, this, userName);
+        client = new ChatClientTCP(serverAdress, PORT, this);
 
         TextField messageField = new TextField();
 
@@ -104,7 +106,7 @@ public class MessangerApp extends Application {
 
         //layout
         VBox root = new VBox(10);
-        userNameLabel = new Label("Your name is : Waiting for server..."); // Initialize the Label
+        // userName Label initialized in method when user is verified on server and received on client side
         root.getChildren().addAll( scrollableMessageList, userNameLabel, new Label("Write your message") ,
                 messageField,
                 sendButtons,
@@ -124,14 +126,17 @@ public class MessangerApp extends Application {
 
 
         primaryStage.show();
+
+        //Future
+        Platform.runLater(this::validateNewUser);
     }
 
-    public void receiveUserFromServer(User user)
+    public void setUser(User user)
     {
+        this.user = user;
         Platform.runLater(()-> {
-            this.user = user;
             //compllete future
-            userFuture.complete(user);
+            //userFuture.complete(user);
             // Update the UI label when server send user
             userNameLabel.setText("Your name is : " + user.getName() + " (ID: " + user.getId() + ")");
         });
@@ -148,17 +153,18 @@ public class MessangerApp extends Application {
 
     }
     public void receiveChatFromServer(Chat updatedChat) {
-        userFuture.thenAcceptAsync(currentUser -> { // Execute asynchronously after user is received
+        //userFuture.thenAcceptAsync(currentUser -> {
             Platform.runLater(() -> {
-                System.out.println("Client (CompletableFuture: userFuture.thenAcceptAsync)");
-                System.out.println("Client (" + currentUser.getName() + "): receiveChatFromServer called. Chat object: " + updatedChat);
-                System.out.println("Client (" + currentUser.getName() + "): Number of messages in updatedChat: " + updatedChat.getMessages().size());
+                //System.out.println("Client (CompletableFuture: userFuture.thenAcceptAsync)");
+                System.out.println("Client (" + user.getName() + "): receiveChatFromServer called. Chat object: " + updatedChat);
+                System.out.println("Client (" + user.getName() + "): Number of messages in updatedChat: " + updatedChat.getMessages().size());
                 this.chat = updatedChat;
                 updateMessageDisplay();
-                System.out.println("Client (" + currentUser.getName() + "): receiveChatFromServer finished");
+                System.out.println("Client (" + user.getName() + "): receiveChatFromServer finished");
             });
-        }, Platform::runLater); // Ensure the thenAccept runs on the JavaFX thread
+        //}, Platform::runLater);
     }
+
     private void updateMessageDisplay() {
         if (user == null) {
             System.out.println("Client: updateMessageDisplay called before user was received");
@@ -170,7 +176,6 @@ public class MessangerApp extends Application {
         }
     }
 
-
     public void receiveJoinGreetings(String joinGreetings)
     {
         Platform.runLater(()-> {
@@ -179,8 +184,9 @@ public class MessangerApp extends Application {
         });
     }
 
-    private String getUserName()
+    private void validateNewUser()
     {
+        userNameLabel.setText("Your name is : Waiting for input..."); // Initialize the Label
         while (true) //when user types name -> return from here
         {
             TextInputDialog dialog = new TextInputDialog("author");
@@ -191,10 +197,26 @@ public class MessangerApp extends Application {
             //wrap data for avoiding null-checks
             Optional<String> result = dialog.showAndWait();
 
+
             if (result.isPresent() && !result.get().trim().isEmpty()) {
-                //Exit
-                return result.get().trim();
-            } else {
+                userNameLabel.setText("Your name is : Waiting for server...");
+                String proposedName = result.get().trim();
+
+                userFuture = client.sendUserNameToServer(proposedName);
+                try {
+                    User validatedUser = userFuture.get(5, TimeUnit.SECONDS); // Wait for server response
+
+                    if (validatedUser != null) {
+                        setUser(validatedUser); // Complete
+                        return; // Exit
+                    } else {
+                        showError("User Name \"" + proposedName + "\" already exists! Please try again.");
+                    }
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    showError("Error communicating with the server: " + e.getMessage());
+                }
+            }
+            else {
                 showError("Authorname input canceled or empty. Please try again.");
                 // delay to avoid excessive looping
                 try {
@@ -202,7 +224,6 @@ public class MessangerApp extends Application {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-
             }
         }
     }
@@ -238,6 +259,7 @@ public class MessangerApp extends Application {
                 messageMenu.hide();
             }
         });
+        clickedMessage = null;
     }
 
 
@@ -257,50 +279,9 @@ public class MessangerApp extends Application {
         dialog.showAndWait();
 
         client.sendRequestToServer(new EditRequest(user,clickedMessage,dialog.getEditor().getText()));
-        //if()
-        switch (clickedMessage) {
-            case TextMessage textMessage:
-            {
-                textMessage.setContent(dialog.getEditor().getText());
-                updateMessageList(textMessage);
-                break;
-            }
-            case ContactMessage contactMessage:
-            {
-                contactMessage.setContact(dialog.getEditor().getText());
-                updateMessageList(contactMessage);
-                break;
-            }
-            case ImageMessage imageMessage:
-            {
-                imageMessage.setImageUrl(dialog.getEditor().getText());
-                updateMessageList(imageMessage);
-                break;
-            }
-            case VoiceMessage voiceMessage:
-            {
-                voiceMessage.setAudioUrl(dialog.getEditor().getText());
-                updateMessageList(voiceMessage);
-                break;
-            }
-            case LocationMessage locationMessage:
-            {
-                locationMessage.setLocation(dialog.getEditor().getText());
-                updateMessageList(locationMessage);
-                break;
-            }
-            case FileMessage fileMessage:
-            {
-                fileMessage.setFileName(dialog.getEditor().getText());
-                updateMessageList(fileMessage);
-                break;
-            }
-            default:
-            {
-                showError("Edit message error");
-            }
-            messageMenu.hide();
-        }
+
+        messageMenu.hide();
+        clickedMessage = null;
     }
 
     private void updateMessageList(BaseMessage message)
@@ -317,7 +298,7 @@ public class MessangerApp extends Application {
                 break;
             }
         }
-        if(previous_state != message.render() ) {
+        if(!previous_state.equals(message.render()) ) {
             showSuccess("Message Updated");
         }
     }
@@ -434,9 +415,7 @@ public class MessangerApp extends Application {
         return messageStackPane;
     }
 
-    private void showSuccess(String message) {
-        //.setText(message);
-        //statusLabel.setTextFill(Color.GREEN);
+    public void showSuccess(String message) {
 
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Success");
@@ -446,9 +425,7 @@ public class MessangerApp extends Application {
 
     }
 
-    private void showError(String message) {
-        //statusLabel.setText("Error: " + message);
-        //.setTextFill(Color.RED);
+    public void showError(String message) {
 
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle("Error");
