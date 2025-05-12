@@ -9,6 +9,13 @@ public class User implements Serializable {
     private int id;
     private static int count = 0;
 
+    // I have problem with serialization(server sends the same object - client do not reserialize it and use previous object - so I need to clone for creating a new object)
+    public User(User other) {
+        this.id = other.id;
+        this.name = other.name;
+        this.phoneNumber = other.phoneNumber;
+    }
+
     public User(String name, String phoneNumber, int id) {
         this.name = name;
         this.phoneNumber = phoneNumber;

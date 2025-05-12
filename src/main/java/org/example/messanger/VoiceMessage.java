@@ -11,6 +11,15 @@ public class VoiceMessage extends BaseMessage{
         super(user, date);
         this.audioUrl = audioUrl;
     }
+    // Copy constructor
+    public VoiceMessage(VoiceMessage other) {
+        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
+        this.audioUrl = other.audioUrl;
+    }
+    @Override
+    public VoiceMessage clone() {
+        return new VoiceMessage(this);
+    }
     public void setAudioUrl(String audioUrl) {this.audioUrl=audioUrl;}
     public String getAudioUrl(){return audioUrl;}
 

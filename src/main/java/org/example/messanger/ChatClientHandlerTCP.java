@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 
 //allows the server to handle multiple clients concurrently
 //the server's representative for each connected client
@@ -116,17 +118,40 @@ public class ChatClientHandlerTCP implements Runnable{
         else System.out.println("ClientHandler: sendMessageToClient: ObjectOutputStream = null");
     }
     public void sendChatUpdateToClient(Chat chat) {
-        if(outputStream != null) {
+        //If the same Chat or BaseMessage object is sent again through ObjectOutputStream,
+        // Java's serialization system remembers it and sends a reference token instead of full data.
+        //Cloning ensures a new object reference and forces full serialization.
+
+        if (outputStream != null) {
             System.out.println("ClientHandler: sendChatUpdateToClient: " + user.getName());
             try {
-                outputStream.writeObject(chat);
+                // Deep clone messages
+                List<Messageable> clonedMessages = new ArrayList<>();
+                for (Messageable message : chat.getMessages()) {
+                    if (message instanceof BaseMessage) {
+                        clonedMessages.add(((BaseMessage) message).clone());
+                    } else {
+                        // fallback: just add as-is if not cloneable (optional)
+                        clonedMessages.add(message);
+                    }
+                }
+
+                // Optional: clone users if needed (usually not necessary unless users are mutable/shared)
+                List<User> clonedUsers = new ArrayList<>(chat.getUsers());
+
+                // Construct a new Chat instance with cloned data
+                Chat clonedChat = new Chat(chat.getChatName(), clonedUsers, clonedMessages);
+
+                // Reset stream to force object re-serialization
+                outputStream.reset();  // VERY important!
+                outputStream.writeObject(clonedChat);
                 outputStream.flush();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }
-        else
+        } else {
             System.out.println("ClientHandler: sendChatUpdateToClient: ObjectOutputStream = null");
+        }
     }
     public void sendJoinGreetingsToClient(String joinGreetings)
     {

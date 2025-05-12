@@ -9,6 +9,16 @@ public class TextMessage extends BaseMessage{
         super(user, date);
         this.content = content;
     }
+    // Copy constructor
+    public TextMessage(TextMessage other) {
+        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
+        this.content = other.content;
+    }
+    @Override
+    public TextMessage clone() {
+        return new TextMessage(this);
+    }
+
     public void setContent(String content) {this.content=content;}
     public String getContent(){return content;}
 

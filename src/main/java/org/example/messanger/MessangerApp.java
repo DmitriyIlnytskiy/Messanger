@@ -3,6 +3,7 @@ package org.example.messanger;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
@@ -15,6 +16,7 @@ import javafx.stage.Stage;
 
 import java.io.File;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -153,16 +155,50 @@ public class MessangerApp extends Application {
 
     }
     public void receiveChatFromServer(Chat updatedChat) {
-        //userFuture.thenAcceptAsync(currentUser -> {
             Platform.runLater(() -> {
-                //System.out.println("Client (CompletableFuture: userFuture.thenAcceptAsync)");
                 System.out.println("Client (" + user.getName() + "): receiveChatFromServer called. Chat object: " + updatedChat);
                 System.out.println("Client (" + user.getName() + "): Number of messages in updatedChat: " + updatedChat.getMessages().size());
+                //dynamically decide whether to update INCREAMENTALLY or redraw EVERYTHING
+                /*if (helperCompareCurrentAndNewChatState(updatedChat)) {
+                    this.chat = updatedChat;
+                    updateMessageListIncrementally(updatedChat); // For minor edits
+                    System.out.println("Client (" + user.getName() + "): receiveChatFromServer: helperCompareCurrentAndNewChatState(redraw minor change) finished");
+                } else {
+
+                }*/
                 this.chat = updatedChat;
-                updateMessageDisplay();
+                //debug
+                for (Messageable msg : updatedChat.getMessages()) {
+                    System.out.println("Client DEBUG: Message ID " + msg.getMessageId() + " content: " + msg.render());
+                }
+                updateMessageDisplay(); // For major changes
+                System.out.println("Client (" + user.getName() + "): receiveChatFromServer: updateMessageDisplay(redraw all) finished");
                 System.out.println("Client (" + user.getName() + "): receiveChatFromServer finished");
             });
-        //}, Platform::runLater);
+    }
+    private boolean helperCompareCurrentAndNewChatState(Chat newChat)
+    {
+        if (chat == null || newChat == null) return false;
+        List<Messageable> currentMessages = chat.getMessages();
+        List<Messageable> newMessages = newChat.getMessages();
+
+        // If size differs, full redraw
+        if (currentMessages.size() != newMessages.size()) return false;
+
+        // Check if messages are the same objects or IDs match
+        for (int i = 0; i < currentMessages.size(); i++) {
+            if (currentMessages.get(i).getMessageId() != newMessages.get(i).getMessageId()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    private void updateMessageListIncrementally(Chat updatedChat)
+    {
+        for (Messageable updatedMessage : updatedChat.getMessages()) {
+            updateMessageList(updatedMessage);
+        }
+        System.out.println("Client: ("+user.getName()+") updateMessageListIncrementally ");
     }
 
     private void updateMessageDisplay() {
@@ -180,7 +216,8 @@ public class MessangerApp extends Application {
     {
         Platform.runLater(()-> {
             Label label = new Label(joinGreetings);
-            messageList.getChildren().add(label);
+            StackPane wrapper = new StackPane(label);
+            messageList.getChildren().add(wrapper);
         });
     }
 
@@ -284,24 +321,58 @@ public class MessangerApp extends Application {
         clickedMessage = null;
     }
 
-    private void updateMessageList(BaseMessage message)
-    {
-        String previous_state = "";
-        for (int i = 0; i < messageList.getChildren().size(); i++) {
-            StackPane messagePane = (StackPane) messageList.getChildren().get(i);
-            // Find Label by message ID
-            Label messageLabel = (Label) messagePane.lookup("#" + message.getMessageId());
+//    private void updateMessageList(Messageable updatedMessage)
+//    {
+//        System.out.println("Client: ("+user.getName()+") updateMessageList ");
+//        for (Node node : messageList.getChildren()) {
+//            if(node instanceof StackPane messagePane) {
+//                // Find Label by message ID
+//                Label messageLabel = (Label) messagePane.lookup("#" + updatedMessage.getMessageId());
+//                System.out.println("Client: ("+user.getName()+") updateMessageList: message ID: " + updatedMessage.getMessageId());
+//
+//                if (messageLabel != null) {
+//                    String previous_state = messageLabel.getText();
+//                    //if same, do not change
+//                    if (!previous_state.equals(updatedMessage.render())) {
+//                        messageLabel.setText(updatedMessage.render());
+//                        showSuccess("Message Updated");
+//                    }
+//                    return;
+//                }
+//            }
+//        }
+//
+//    }
+private void updateMessageList(Messageable updatedMessage) {
+    System.out.println("Client: (" + user.getName() + ") updateMessageList");
 
-            if (messageLabel != null) {
-                previous_state = messageLabel.getText();
-                messageLabel.setText(message.render());
-                break;
+    for (Node node : messageList.getChildren()) {
+        if (node instanceof StackPane messagePane) {
+            for (Node child : messagePane.getChildren()) {
+                if (child instanceof Label messageLabel) {
+                    if (messageLabel.getId() != null && messageLabel.getId().equals(Integer.toString(updatedMessage.getMessageId()))) {
+
+                        System.out.println("    Client: updateMessageList: (" + user.getName() + ") Found message label for ID: " + updatedMessage.getMessageId());
+
+                        String previous_state = messageLabel.getText();
+                        if (!previous_state.equals(updatedMessage.render())) {
+
+                            System.out.println("    Client: updateMessageList: Previous: " + previous_state);
+                            System.out.println("    Client: updateMessageList: Updated : " + updatedMessage.render());
+
+                            messageLabel.setText(updatedMessage.render());
+                            showSuccess("Message Updated");
+                        }
+                        System.out.println("    Client: updateMessageList: Previous == Updated? " + previous_state.equals(updatedMessage.render()));
+                        return;
+                    }
+                }
             }
         }
-        if(!previous_state.equals(message.render()) ) {
-            showSuccess("Message Updated");
-        }
     }
+
+    System.out.println("    Client: (" + user.getName() + ") Message label NOT found for ID: " + updatedMessage.getMessageId());
+}
 
     private void handleSaveToFile(String fileName)
     {
@@ -389,6 +460,8 @@ public class MessangerApp extends Application {
     //Creating GUI message(clickable)
     private StackPane createMessageStackPane(Messageable message)
     {
+        System.out.println("Client: createMessageStackPane: rendering message ID " + message.getMessageId() + ": " + message.render());
+
         StackPane messageStackPane = new StackPane();
         Rectangle background = new Rectangle(200,60, Color.GRAY);
 

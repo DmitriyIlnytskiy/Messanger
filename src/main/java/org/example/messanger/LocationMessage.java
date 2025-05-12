@@ -11,6 +11,16 @@ public class LocationMessage extends BaseMessage{
         super(user, date);
         this.location = location;
     }
+    // Copy constructor
+    public LocationMessage(LocationMessage other) {
+        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
+        this.location = other.location;
+    }
+    @Override
+    public LocationMessage clone() {
+        return new LocationMessage(this);
+    }
+
     public void setLocation(String location) {this.location=location;}
     public String getLocation(){return location;}
 

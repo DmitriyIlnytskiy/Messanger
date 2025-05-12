@@ -1,12 +1,26 @@
 package org.example.messanger;
 
-public class UserIsValidResponse extends ServerResponse{
-    private User user;
+public class UserIsValidResponse implements Responsable{
+    private final User user;
+    private final boolean success;
+    private final String information;
     public UserIsValidResponse(boolean success, String information, User user) {
-        super(success, information);
+        this.success = success;
+        this.information = information;
         this.user = user;
     }
     public User getUser() {
-        return user;
+        return this.user;
     }
+
+    @Override
+    public boolean isSuccess() {
+        return this.success;
+    }
+
+    @Override
+    public String getInformation() {
+        return this.information;
+    }
+
 }

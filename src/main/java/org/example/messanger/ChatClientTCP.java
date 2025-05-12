@@ -97,7 +97,7 @@ public class ChatClientTCP {
                             System.out.println("Client: receiveJoinGreetings: " + str);
                             break;
                         default:
-                            System.out.println("Received wrong type");
+                            System.out.println("Client: Received wrong type: " + received.getClass());
                     }
                 }
 

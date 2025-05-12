@@ -12,6 +12,16 @@ public class ContactMessage extends BaseMessage{
         this.contact = contact;
 
     }
+    // Copy constructor
+    public ContactMessage(ContactMessage other) {
+        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
+        this.contact = other.contact;
+    }
+    @Override
+    public ContactMessage clone() {
+        return new ContactMessage(this);
+    }
+
     public void setContact(String contact) {this.contact=contact;}
     public String getContact(){return contact;}
 

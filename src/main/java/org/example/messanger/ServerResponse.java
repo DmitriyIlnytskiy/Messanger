@@ -3,13 +3,14 @@ package org.example.messanger;
 public abstract class ServerResponse implements Responsable{
     private final boolean success;
     private final String information;
+    private Messageable message;
 
-    public ServerResponse(boolean success, String information)
+    public ServerResponse(boolean success, String information, Messageable message)
     {
         this.success = success;
         this.information = information;
+        this.message = message;
     }
-
     @Override
     public boolean isSuccess() {
         return success;
@@ -18,4 +19,7 @@ public abstract class ServerResponse implements Responsable{
     public String getInformation() {
         return information;
     }
+
+    public Messageable getMessage(){return message;}
+
 }
