@@ -5,9 +5,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 public class ChatServerTCP {
     public static final int PORT            = 12345;
@@ -221,6 +219,12 @@ public class ChatServerTCP {
          }
 
          Messageable message = chat.findMessageById(editRequest.getMessage().getMessageId());
+
+         System.out.println("Available messages:");
+         for (Messageable m : chat.getMessages()) {
+             System.out.println("ID: " + m.getMessageId());
+         }
+
          System.out.println("   Server: created message for identify ID of requested message on server(for editing) ID is: " + message.getMessageId());
 
          switch (message) {
@@ -251,9 +255,48 @@ public class ChatServerTCP {
          System.out.println("   Server: Sending edited message to client: " + message.render());
          requester.giveResponseToClient(new EditResponse(true, "message: " + message.getMessageId() + " edited!", message));
      }
+
      public void deleteResponse(ChatClientHandlerTCP requester, DeleteRequest deleteRequest)
      {
+         if (deleteRequest == null) {
+             requester.giveResponseToClient(new DeleteResponse(false, "Delete request is null", null));
+             return;
+         } else if (!requester.getUser().equals(deleteRequest.getRequester())) {
+             requester.giveResponseToClient(new DeleteResponse(false, "Delete request's user is not a user who can be a requester", null));
+             return;
+         }
 
+
+         System.out.println("Server: DeleteRequest's message ID is: " + deleteRequest.getMessage().getMessageId());
+
+         Messageable messageToDelete = deleteRequest.getMessage();
+
+         // Remove the message by ID
+         boolean removed = false;
+         Iterator<Messageable> it = chat.getMessages().iterator();
+         while (it.hasNext()) {
+             Messageable m = it.next();
+             if (m.getMessageId() == messageToDelete.getMessageId() && m.getUser().equals(messageToDelete.getUser()) && m.showData().equals(messageToDelete.showData())) {
+                 it.remove();
+                 removed = true;
+                 break;
+             }
+         }
+
+         System.out.println("   Server: DeleteRequest: do remove?: " + removed);
+         System.out.println("   Server: Remaining messages:");
+         for (Messageable msg : chat.getMessages()) {
+             System.out.println("   Message ID: " + msg.getMessageId() + " Content: " + msg.render());
+         }
+
+         if (removed) {
+             requester.giveResponseToClient(new DeleteResponse(true, "Message deleted", messageToDelete));
+
+             // Broadcast updated chat to all users in the chat
+             broadcastChatUpdate(chat);
+         } else {
+             requester.giveResponseToClient(new DeleteResponse(false, "Message not found", null));
+         }
      }
 
     public static void main(String[] args) {

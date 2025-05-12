@@ -3,6 +3,7 @@ package org.example.messanger;
 import javafx.application.Platform;
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.concurrent.CompletableFuture;
 
 // the application's representative on the client side.
@@ -160,8 +161,11 @@ public class ChatClientTCP {
             outputStream.writeObject(request);
             outputStream.flush();
 
+        } catch (SocketException e) {
+            System.err.println("Client: Socket closed while sending request.");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            System.err.println("Client: IOException while sending request.");
+            e.printStackTrace();
         }
     }
 

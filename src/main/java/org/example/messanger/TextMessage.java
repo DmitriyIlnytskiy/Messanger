@@ -10,13 +10,13 @@ public class TextMessage extends BaseMessage{
         this.content = content;
     }
     // Copy constructor
-    public TextMessage(TextMessage other) {
-        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
-        this.content = other.content;
+    public TextMessage(User user, Date date, int messageId, String content) {
+        super(user, date, messageId);
+        this.content = content;
     }
     @Override
     public TextMessage clone() {
-        return new TextMessage(this);
+        return new TextMessage(user, new Date(date.getTime()), messageId, content);
     }
 
     public void setContent(String content) {this.content=content;}

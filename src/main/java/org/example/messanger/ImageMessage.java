@@ -12,13 +12,13 @@ public class ImageMessage extends BaseMessage{
         this.imageUrl = imageUrl;
     }
     // Copy constructor
-    public ImageMessage(ImageMessage other) {
-        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
-        this.imageUrl = other.imageUrl;
+    public ImageMessage(User user, Date date, int messageId, String imageUrl) {
+        super(user, date, messageId);
+        this.imageUrl = imageUrl;
     }
     @Override
     public ImageMessage clone() {
-        return new ImageMessage(this);
+        return new ImageMessage(user, new Date(date.getTime()), messageId, imageUrl);
     }
 
 

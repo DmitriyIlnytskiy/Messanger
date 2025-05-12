@@ -110,11 +110,11 @@ public class Chat implements Serializable {
    }
    public List<Messageable> getMessages()
    {
-       return new ArrayList<>(messages);
+       return messages;
    }
    public List<User> getUsers()
    {
-       return new ArrayList<>(users);
+       return users;
    }
 
    public String getChatName(){return chatName;}
@@ -141,9 +141,7 @@ public class Chat implements Serializable {
     }
 
     public void sortMessagesById() {
-        List<Messageable> temp = new ArrayList<>(messages);
-        mergeSort(temp, 0, temp.size() - 1);
-        this.messages = temp; // Update the main list with the sorted one
+        mergeSort(this.messages, 0, this.messages.size() - 1);
     }
 
     private void mergeSort(List<Messageable> arr, int l, int r) {

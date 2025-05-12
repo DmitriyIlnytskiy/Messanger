@@ -10,13 +10,13 @@ public class FileMessage extends BaseMessage{
         this.fileName = fileName;
     }
     // Copy constructor
-    public FileMessage(FileMessage other) {
-        super(new User(other.user), new Date(other.date.getTime()));  // Deep copy the user
-        this.fileName = other.fileName;
+    public FileMessage(User user, Date date, int messageId, String fileName) {
+        super(user, date, messageId);
+        this.fileName = fileName;
     }
     @Override
     public FileMessage clone() {
-        return new FileMessage(this);
+        return new FileMessage(user, new Date(date.getTime()), messageId, fileName);
     }
 
     public void setFileName(String fileName) {this.fileName=fileName;}

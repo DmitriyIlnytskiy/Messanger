@@ -6,7 +6,7 @@ abstract class BaseMessage implements Messageable, Cloneable {
     protected Date date;
     protected User user;
 
-    private int messageId;
+    protected int messageId;
     private static int messageCount = 0;
 
     // I have problem with serialization(server sends the same object - client do not reserialize it and use previous object - so I need to clone for creating a new object)
@@ -14,6 +14,16 @@ abstract class BaseMessage implements Messageable, Cloneable {
         this.user = other.getUser();
         this.date = other.getDate();
         this.messageId = other.getMessageId();
+    }
+    public BaseMessage(User user, Date date) {
+        this.user = user;
+        this.date = date;
+        messageId = ++messageCount;
+    }
+    public BaseMessage(User user, Date date, int messageId) {
+        this.user = user;
+        this.date = date;
+        this.messageId = messageId;
     }
     // Deep cloning method
     @Override
@@ -33,11 +43,6 @@ abstract class BaseMessage implements Messageable, Cloneable {
         }
     }
 
-    public BaseMessage(User user, Date date) {
-        this.user = user;
-        this.date = date;
-        messageId = ++messageCount;
-    }
     public int getMessageCount() {return messageCount;}
 
     @Override

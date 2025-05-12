@@ -265,14 +265,16 @@ public class MessangerApp extends Application {
         }
     }
 
-    private void handleDelete()
-    {
+    private void handleDelete() {
         if (clickedMessage == null) return;
+
+        // Check if the message belongs to the current user
         if (!clickedMessage.getUser().equals(user)) {
             showError("You can only delete your own messages.");
             return;
         }
 
+        // Show confirmation dialog
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
         confirmation.setTitle("Delete Message");
         confirmation.setHeaderText("Confirm deletion");
@@ -280,22 +282,26 @@ public class MessangerApp extends Application {
 
         confirmation.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                //delete from chat
-                chat.getMessages().remove(clickedMessage);
 
-                // Remove the StackPane from messageList
+                // Create a DeleteRequest and send to the server
+                client.sendRequestToServer(new DeleteRequest(user, clickedMessage));
+
+                // Remove the StackPane from messageList (client-side UI update)
                 for (int i = 0; i < messageList.getChildren().size(); i++) {
                     StackPane messagePane = (StackPane) messageList.getChildren().get(i);
                     Label messageLabel = (Label) messagePane.lookup("#" + clickedMessage.getMessageId());
                     if (messageLabel != null) {
-                        //delete from messageList
+                        // Remove the message from the UI
                         messageList.getChildren().remove(messagePane);
                         break;
                     }
                 }
+
+                // Hide the message menu (optional)
                 messageMenu.hide();
             }
         });
+
         clickedMessage = null;
     }
 
