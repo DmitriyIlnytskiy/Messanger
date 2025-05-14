@@ -1,6 +1,7 @@
 package org.example.messanger;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 public interface Messageable extends Serializable {
@@ -14,4 +15,6 @@ public interface Messageable extends Serializable {
     String showData();
 
     Date getDate();
+
+    LocalDateTime getTimestamp();
 }

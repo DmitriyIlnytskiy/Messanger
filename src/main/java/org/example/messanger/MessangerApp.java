@@ -3,18 +3,21 @@ package org.example.messanger;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontPosture;
+import javafx.scene.text.Text;
 import javafx.stage.Popup;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.time.LocalTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +37,11 @@ public class MessangerApp extends Application {
     private Label userNameLabel;
     private User user;
     private ChatClientTCP client;
+
+    private ThemeManager.Theme currentTheme = ThemeManager.Theme.LIGHT; // Initial theme
+    private Button themeToggleButton;
+    private Scene scene; // Store the scene reference
+
     // using CompletableFuture fixed race condition by explicitly waiting for the User object to be received before executing UI code
     // in receiveChatFromServer that depended on User
     // Receiving the User and the initial Chat object from the server are ASYNCHRONOUS operations happening on a background thread, so
@@ -44,6 +52,7 @@ public class MessangerApp extends Application {
     public void start(Stage primaryStage)
     {
         userNameLabel = new Label("Client: Waiting for input");
+        userNameLabel.setStyle("-fx-font-weight: bold;"); // Basic styling
         // ScrollPane for wrap messageList(create scrollable interface)
         ScrollPane messageScrollPane = new ScrollPane(messageList); // Wrap messageList in ScrollPane
         messageScrollPane.setPrefHeight(300);
@@ -66,6 +75,14 @@ public class MessangerApp extends Application {
         Button sendFileMessageButton     = new Button("Send File");
         Button sendLocationMessageButton = new Button("Send Location");
         Button sendContactMessageButton  = new Button("Send Contact");
+
+        styleButton(sendTextMessageButton);
+        styleButton(sendImageMessageButton);
+        styleButton(sendVoiceMessageButton);
+        styleButton(sendFileMessageButton);
+        styleButton(sendLocationMessageButton);
+        styleButton(sendContactMessageButton);
+
         sendButtons.getChildren().addAll(
                 sendTextMessageButton,
                 sendImageMessageButton,
@@ -103,8 +120,20 @@ public class MessangerApp extends Application {
         Button loadButton = new Button("Load from File");
         loadButton.setPadding(new Insets(5, 10, 5, 10)); // 5 pixels top/bottom, 10 pixels left/right
 
+        HBox fileButtons = new HBox(saveButton, loadButton);
+
+        styleButton(saveButton);
+        styleButton(loadButton);
+
         saveButton.setOnAction(e->handleSaveToFile(fileTextField.getText().trim()));
         loadButton.setOnAction(e->handleLoadFromFile(fileTextField.getText().trim()));
+
+        // Theme toggle button
+        themeToggleButton = new Button("Dark Mode");
+
+        styleButton(themeToggleButton);
+
+        themeToggleButton.setOnAction(e -> toggleTheme());
 
         //layout
         VBox root = new VBox(10);
@@ -112,13 +141,18 @@ public class MessangerApp extends Application {
         root.getChildren().addAll( scrollableMessageList, userNameLabel, new Label("Write your message") ,
                 messageField,
                 sendButtons,
-                new Label("File Name:"), fileTextField, saveButton,
-                loadButton
+                new Label("File Name:"), fileTextField,
+                fileButtons,
+                themeToggleButton
                 //statusLabel
         );
 
         // Scene and Stage setup
-        Scene scene = new Scene(root, 550, 600);
+        scene = new Scene(root, 650, 600);
+
+        // Apply initial theme
+        ThemeManager.applyTheme(scene, currentTheme);
+
 
         primaryStage.setScene(scene);
         primaryStage.setTitle("Messenger");
@@ -132,6 +166,89 @@ public class MessangerApp extends Application {
         //Future
         Platform.runLater(this::validateNewUser);
     }
+
+    private void toggleTheme() {
+        currentTheme = (currentTheme == ThemeManager.Theme.LIGHT) ? ThemeManager.Theme.DARK : ThemeManager.Theme.LIGHT;
+        ThemeManager.applyTheme(scene, currentTheme);
+        themeToggleButton.setText(currentTheme == ThemeManager.Theme.DARK ? "Light Mode" : "Dark Mode");
+        // Re-style existing messages after theme change
+        for (Node node : messageList.getChildren()) {
+            if (node instanceof StackPane) {
+                StackPane messagePane = (StackPane) node;
+                if (messagePane.getUserData() != null) {
+                    applyMessageStyle(messagePane);
+                } else {
+                    // Apply a default style for join messages, which don't have user data
+                    for (Node child : messagePane.getChildren()) {
+                        if (child instanceof Label) {
+                            ((Label) child).setTextFill(currentTheme == ThemeManager.Theme.DARK ? Color.WHITE : Color.BLACK);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void applyMessageStyle(StackPane messagePane) {
+        if (messagePane.getUserData() instanceof Messageable) { // check the instance type
+            Messageable message = (Messageable) messagePane.getUserData();
+            boolean isOwnMessage = message.getUser().equals(user);
+
+            Color bubbleColor = isOwnMessage
+                    ? (currentTheme == ThemeManager.Theme.DARK ? Color.web("#2e8b57") : Color.LIGHTGREEN)
+                    : (currentTheme == ThemeManager.Theme.DARK ? Color.web("#505050") : Color.LIGHTGRAY);
+
+            Color textColor = (currentTheme == ThemeManager.Theme.DARK) ? Color.WHITE : Color.BLACK;
+            Color timestampColor = (currentTheme == ThemeManager.Theme.DARK) ? Color.LIGHTGRAY : Color.GRAY;
+
+            System.out.println("applyMessageStyle: messageId=" + message.getMessageId() +
+                    ", isOwnMessage=" + isOwnMessage +
+                    ", currentTheme=" + currentTheme +
+                    ", bubbleColor=" + bubbleColor +
+                    ", textColor=" + textColor);
+
+
+            // Traverse: StackPane (messagePane) -> HBox -> StackPane -> Region + VBox
+            for (Node outer : messagePane.getChildren()) {
+                if (outer instanceof HBox hbox) {
+                    for (Node inner : hbox.getChildren()) {
+                        if (inner instanceof StackPane bubble) {
+                            for (Node bubbleChild : bubble.getChildren()) {
+                                if (bubbleChild instanceof Region region &&
+                                        "bubble-background".equals(region.getId())) {
+                                    region.setBackground(new Background(new BackgroundFill(
+                                            bubbleColor, new CornerRadii(12), Insets.EMPTY
+                                    )));
+                                } else if (bubbleChild instanceof VBox vbox) {
+                                    for (Node content : vbox.getChildren()) {
+                                        if (content instanceof Label label) {
+                                            if (label.getFont().getSize() <= 11) {
+                                                label.setTextFill(timestampColor); // timestamp
+                                            } else {
+                                                label.setTextFill(textColor); // message
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            System.out.println("applyMessageStyle: messagePane.getUserData() is NOT Messageable");
+        }
+    }
+
+
+    // Add solid black border to all buttons:
+    private void styleButton(Button button) {
+
+        String buttonBorder = (currentTheme == ThemeManager.Theme.DARK) ? "-fx-border-color: white;" : "-fx-border-color: black;";
+        button.setStyle(" -fx-border-width: 1px; -fx-padding: 5 10 5 10; -fx-background-color: transparent; -fx-border-radius: 15; " + buttonBorder);
+    }
+    /////////////////////////
 
     public void setUser(User user)
     {
@@ -217,9 +334,11 @@ public class MessangerApp extends Application {
         Platform.runLater(()-> {
             Label label = new Label(joinGreetings);
             StackPane wrapper = new StackPane(label);
+            //applyMessageStyle(wrapper);
             messageList.getChildren().add(wrapper);
         });
     }
+
 
     private void validateNewUser()
     {
@@ -305,7 +424,6 @@ public class MessangerApp extends Application {
         clickedMessage = null;
     }
 
-
     private void handleEdit()
     {
         if(clickedMessage == null) return;
@@ -326,30 +444,7 @@ public class MessangerApp extends Application {
         messageMenu.hide();
         clickedMessage = null;
     }
-
-//    private void updateMessageList(Messageable updatedMessage)
-//    {
-//        System.out.println("Client: ("+user.getName()+") updateMessageList ");
-//        for (Node node : messageList.getChildren()) {
-//            if(node instanceof StackPane messagePane) {
-//                // Find Label by message ID
-//                Label messageLabel = (Label) messagePane.lookup("#" + updatedMessage.getMessageId());
-//                System.out.println("Client: ("+user.getName()+") updateMessageList: message ID: " + updatedMessage.getMessageId());
-//
-//                if (messageLabel != null) {
-//                    String previous_state = messageLabel.getText();
-//                    //if same, do not change
-//                    if (!previous_state.equals(updatedMessage.render())) {
-//                        messageLabel.setText(updatedMessage.render());
-//                        showSuccess("Message Updated");
-//                    }
-//                    return;
-//                }
-//            }
-//        }
-//
-//    }
-private void updateMessageList(Messageable updatedMessage) {
+    private void updateMessageList(Messageable updatedMessage) {
     System.out.println("Client: (" + user.getName() + ") updateMessageList");
 
     for (Node node : messageList.getChildren()) {
@@ -464,36 +559,83 @@ private void updateMessageList(Messageable updatedMessage) {
     }
 
     //Creating GUI message(clickable)
-    private StackPane createMessageStackPane(Messageable message)
-    {
+    private StackPane createMessageStackPane(Messageable message) {
         System.out.println("Client: createMessageStackPane: rendering message ID " + message.getMessageId() + ": " + message.render());
 
-        StackPane messageStackPane = new StackPane();
-        Rectangle background = new Rectangle(200,60, Color.GRAY);
+        // Message content and label
+        String textContent = message.render();
+        Label textLabel = new Label(textContent);
+        textLabel.setId(Integer.toString(message.getMessageId()));
+        textLabel.setFont(Font.font("Arial", 14));
+        textLabel.setWrapText(true);
+        textLabel.setMaxWidth(300); // Control wrapping width
+        textLabel.setTextFill((currentTheme == ThemeManager.Theme.DARK) ? Color.WHITE : Color.BLACK);
+        textLabel.setPadding(new Insets(10)); // Padding inside the bubble
 
-        String displayText = "Unknown User";
-        if (message.getUser() != null) {
-            displayText = message.render();
-        } else {
-            System.err.println("Warning: Message with ID " + message.getMessageId() + " has a null User.");
-        }
-        Label text = new Label(displayText);
-        //setting id of message to label for uniquely connect each message with each StackPane
-        text.setId(Integer.toString(message.getMessageId()));
 
-        messageStackPane.getChildren().addAll(background, text);
+        // Timestamp label
+        LocalTime time = message.getTimestamp().toLocalTime(); // assuming message.getTimestamp() returns LocalDateTime
+        String formattedTime = String.format("%02d:%02d", time.getHour(), time.getMinute());
+        Label timestampLabel = new Label(formattedTime);
+        timestampLabel.setFont(Font.font("Arial", FontPosture.REGULAR, 10));
+        timestampLabel.setTextFill((currentTheme == ThemeManager.Theme.DARK) ? Color.LIGHTGRAY : Color.GRAY);
 
-        messageStackPane.setOnMouseClicked(event -> {
+        // Align timestamp to bottom-right inside the bubble
+        HBox timestampContainer = new HBox(timestampLabel);
+        timestampContainer.setAlignment(Pos.BOTTOM_RIGHT);
+        timestampContainer.setPadding(new Insets(0, 5, 10, 5)); // Bottom-right padding
+
+        // Combine message and timestamp vertically
+        VBox messageBox = new VBox(4); // spacing between text and timestamp
+        messageBox.getChildren().addAll(textLabel, timestampContainer);
+        messageBox.setPadding(new Insets(10)); // Inner padding for background
+        messageBox.setMaxWidth(220); // Cap max width for wrapping
+        messageBox.setAlignment(Pos.BOTTOM_RIGHT); // Align timestamp properly
+
+
+        // Measure the label's size AFTER applying font and wrapping
+        Text tempText = new Text(textContent);
+        tempText.setFont(textLabel.getFont());
+        tempText.setWrappingWidth(300);
+        tempText.setLineSpacing(textLabel.getLineSpacing());
+
+        Region background = new Region();
+        background.setBackground(new Background(new BackgroundFill(
+                message.getUser().equals(user)
+                        ? (currentTheme == ThemeManager.Theme.DARK ? Color.web("#2e8b57") : Color.LIGHTGREEN)
+                        : (currentTheme == ThemeManager.Theme.DARK ? Color.web("#505050") : Color.LIGHTGRAY),
+                new CornerRadii(12),
+                Insets.EMPTY
+        )));
+        background.setMinHeight(Region.USE_PREF_SIZE);
+        background.setMinWidth(Region.USE_PREF_SIZE);
+        background.setId("bubble-background");
+
+        StackPane bubble = new StackPane(background, messageBox);
+        bubble.setPadding(new Insets(5));
+        bubble.setUserData(message);//for comparing users
+
+        // Wrap in an HBox to align left/right based on sender
+        HBox container = new HBox(bubble);
+        container.setAlignment(message.getUser().equals(user) ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        container.setPadding(new Insets(5, 10, 5, 10));
+
+        // Handle message context menu
+        bubble.setOnMouseClicked(event -> {
             clickedMessage = message;
-            // event.getScreenX() and event.getScreenY() are used to position the Popup relative to the screen, not the window
-            if(message.getUser().equals(user)) {
-                messageMenu.show(messageStackPane, event.getScreenX(), event.getScreenY());
+            if (message.getUser().equals(user)) {
+                messageMenu.show(bubble, event.getScreenX(), event.getScreenY());
             }
         });
 
-        return messageStackPane;
+        return new StackPane(container); // Return wrapped in a StackPane if needed
     }
 
+
+
+
+
+    /// ///////////////////////////
     public void showSuccess(String message) {
 
         Alert alert = new Alert(Alert.AlertType.INFORMATION);

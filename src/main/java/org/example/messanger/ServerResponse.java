@@ -1,7 +1,7 @@
 package org.example.messanger;
 
 public abstract class ServerResponse implements Responsable{
-    private final boolean success;
+    protected final boolean success;
     private final String information;
     private Messageable message;
 

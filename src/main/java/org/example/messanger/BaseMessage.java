@@ -1,5 +1,6 @@
 package org.example.messanger;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 
 abstract class BaseMessage implements Messageable, Cloneable {
@@ -9,21 +10,33 @@ abstract class BaseMessage implements Messageable, Cloneable {
     protected int messageId;
     private static int messageCount = 0;
 
+    private LocalDateTime timestamp;
+
     // I have problem with serialization(server sends the same object - client do not reserialize it and use previous object - so I need to clone for creating a new object)
     public BaseMessage(BaseMessage other) {
         this.user = other.getUser();
         this.date = other.getDate();
         this.messageId = other.getMessageId();
+        this.timestamp = LocalDateTime.now();
     }
     public BaseMessage(User user, Date date) {
         this.user = user;
         this.date = date;
         messageId = ++messageCount;
+        this.timestamp = LocalDateTime.now();
     }
     public BaseMessage(User user, Date date, int messageId) {
         this.user = user;
         this.date = date;
         this.messageId = messageId;
+        this.timestamp = LocalDateTime.now();
+    }
+    @Override
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+    public void setTimestamp(LocalDateTime timestamp) {
+        this.timestamp = timestamp;
     }
     // Deep cloning method
     @Override
